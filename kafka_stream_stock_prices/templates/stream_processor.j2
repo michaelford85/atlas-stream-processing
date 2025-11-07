@@ -1,0 +1,20 @@
+{
+  "name": "{{ stream_processor_name }}",
+  "pipeline": [
+    {
+      "$source": {
+        "connectionName": "{{ kafka_connection_name }}",
+        "topic": "{{ kafka_topic_name }}"
+      }
+    },
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "{{ atlas_db_connection_name }}",
+          "db": "{{ atlas_db_name }}",
+          "coll": "{{ atlas_collection_name }}"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+## Workspace details
+workspace_name: demo-workspace
+atlas_base_url: https://cloud.mongodb.com
+atlas_group_id: "000000000000000000000000"          # Example placeholder Project ID
+atlas_public_key: "public-key-placeholder"
+atlas_private_key: "private-key-placeholder"
+
+## Kafka / Confluent Cloud connection details
+kafka_bootstrap_server: "pkc-demo.aws.confluent.cloud:9092"
+kafka_client_id: "demoClientId12345"
+kafka_client_secret: "demoClientSecretABCDE12345"
+kafka_connection_name: "demo_kafka_connection"
+kafka_topic_name: "sample_data_stock_trades"
+
+## Atlas Database Connection details
+atlas_db_connection_name: "demo_atlas_db_connection"
+atlas_cluster_name: "demo-cluster"
+atlas_db_name: "market"
+atlas_collection_name: "stock_prices"
+
+## Stream Processor details
+stream_processor_name: "kafka_stock_trade_processor"

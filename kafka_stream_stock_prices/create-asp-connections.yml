@@ -1,0 +1,130 @@
+---
+- name: Setup Atlas Stream Processor for Kafka Stock Prices
+  hosts: localhost
+  gather_facts: false
+  # become: true
+  # vars_files: 
+    # ./vars/processor_details.yml
+    # - "{{ lookup('first_found', ['./vars/processor_details_local.yml', './vars/processor_details.yml']) }}"
+
+  tasks:
+    - name: Check if local processor details file exists
+      ansible.builtin.stat:
+        path: "./vars/processor_details_local.yml"
+      register: local_vars_file
+
+    - name: Include local processor details if it exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details_local.yml"
+      when: local_vars_file.stat.exists
+
+    - name: Include default processor details if no local override exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details.yml"
+      when: not local_vars_file.stat.exists
+
+    - name: List existing ASP connections
+      ansible.builtin.uri:
+        url: "https://cloud.mongodb.com/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/connections"
+        method: GET
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        headers:
+          Accept: "application/vnd.atlas.2025-03-12+json"
+        return_content: yes
+      register: asp_list
+
+    # If the API returns {"results":[{name:..}, ...]}
+    - name: Does the Kafka connection already exist?
+      ansible.builtin.set_fact:
+        kafka_conn_exists: >-
+          {{
+            (asp_list.json.results | default([]))
+            | selectattr('name','equalto', kafka_connection_name)
+            | list | length > 0
+          }}
+
+    # If the API returns {"results":[{name:..}, ...]}
+    - name: Does the Atlas Database connection already exist?
+      ansible.builtin.set_fact:
+        atlas_db_conn_exists: >-
+          {{
+            (asp_list.json.results | default([]))
+            | selectattr('name','equalto', atlas_db_connection_name)
+            | list | length > 0
+          }}
+
+    - name: Create Atlas Stream Processing Kafka connection
+      ansible.builtin.uri:
+        url: "https://cloud.mongodb.com/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/connections"
+        method: POST
+        # MongoDB Atlas Programmatic API Keys (Digest auth)
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        # Don't force Basic; Atlas uses HTTP Digest
+        force_basic_auth: no
+        # Headers from your curl
+        headers:
+          Accept: "application/vnd.atlas.2025-03-12+json"
+          Content-Type: "application/json"
+        body:
+          name: "{{ kafka_connection_name | default('kafka_conn_1') }}"
+          authentication:
+            mechanism: "PLAIN"
+            password: "{{ kafka_client_secret }}"
+            username: "{{ kafka_client_id }}"
+          bootstrapServers: "{{ kafka_bootstrap_server }}"
+          config:
+            debug: "queue, msg, protocol"
+            group.protocol.type: "consumer"
+          networking:
+            access:
+              type: "PUBLIC"
+          security:
+            protocol: "SASL_SSL"
+          type: "Kafka"
+        body_format: json
+        status_code: [200, 201, 202]   # Atlas often returns 201/202 on create
+        return_content: yes
+        validate_certs: yes
+        timeout: 60
+      register: atlas_connection_resp
+      when: not kafka_conn_exists
+
+    - name: Create Atlas Stream Processing Atlas Database connection
+      ansible.builtin.uri:
+        url: "https://cloud.mongodb.com/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/connections"
+        method: POST
+        # MongoDB Atlas Programmatic API Keys (Digest auth)
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        # Don't force Basic; Atlas uses HTTP Digest
+        force_basic_auth: no
+        # Headers from your curl
+        headers:
+          Accept: "application/vnd.atlas.2025-03-12+json"
+          Content-Type: "application/json"
+        body:
+          name: "{{ atlas_db_connection_name | default('atlas_db_conn_1') }}"
+          clusterName: "{{ atlas_cluster_name }}" 
+          dbRoleToExecute:
+            role: "readWriteAnyDatabase"
+            type: "BUILT_IN"
+          type: "Cluster"
+        body_format: json
+        status_code: [200, 201, 202]   # Atlas often returns 201/202 on create
+        return_content: yes
+        validate_certs: yes
+        timeout: 60
+      register: atlas_connection_resp
+      when: not atlas_db_conn_exists
+    
+
+    # - name: Show API response (optional)
+    #   ansible.builtin.debug:
+    #     var: atlas_connection_resp.json
+
+    # - name: Create Atlas Stream Processor
+    #   uri:
+    #     url: "{{ atlas_base_url }}/api/atlas/v2/groups/{groupId}/streams/{{ workspace_name }}/connections"
+    #     method: POST
