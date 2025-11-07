@@ -72,24 +72,3 @@
       register: atlas_connection_resp
       when: not processor_exists
 
-    - name: Start Atlas Stream Processor for Kafka Stock Prices
-      ansible.builtin.uri:
-        url: "https://cloud.mongodb.com/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/processor/{{ stream_processor_name | urlencode }}:start"
-        method: POST
-        # MongoDB Atlas Programmatic API Keys (Digest auth)
-        url_username: "{{ atlas_public_key }}"
-        url_password: "{{ atlas_private_key }}"
-        # Don't force Basic; Atlas uses HTTP Digest
-        force_basic_auth: no
-        # Headers from your curl
-        headers:
-          Accept: "application/vnd.atlas.2025-03-12+json"
-          Content-Type: "application/json"
-        # body: "{{ stream_processor_def }}"
-        # body_format: json
-        status_code: [200, 201, 202]   # Atlas often returns 201/202 on create
-        return_content: yes
-        validate_certs: yes
-        timeout: 60
-      # register: atlas_connection_resp
-      # when: not processor_exists
