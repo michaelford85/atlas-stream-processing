@@ -8,6 +8,67 @@
       }
     },
     {
+      "$tumblingWindow": {
+        "boundary": "processingTime",
+        "interval": { "size": 10, "unit": "second" },
+        "pipeline": [ 
+          { 
+            "$group": 
+              {
+                "_id": {
+                  "symbol": "$symbol",
+                  "windowStart": { "$meta": "stream.window.start" },
+                  "windowEnd":   { "$meta": "stream.window.end" }
+                },
+                "totalQty":  { "$sum": "$quantity" },
+                "avgPrice":  { "$avg": "$price" },
+                "vwap_num":  { "$sum": { "$multiply": [ "$price", "$quantity" ] } },
+                "vwap_den":  { "$sum": "$quantity" },
+                "tradeCount": { "$sum": 1 }, 
+
+                "totalBuyQty": {
+                  "$sum": { "$cond": [ { "$eq": [ "$side", "BUY" ] },  "$quantity", 0 ] }
+                },
+                "totalSellQty": {
+                  "$sum": { "$cond": [ { "$eq": [ "$side", "SELL" ] }, "$quantity", 0 ] }
+                },
+
+                "minPrice": { "$min": "$price" },
+                "maxPrice": { "$max": "$price" }
+              }
+          },
+          { 
+            "$project": 
+              { 
+                "_id": 0,
+                "symbol": "$_id.symbol",
+                "windowStart": "$_id.windowStart",
+                "windowEnd":   "$_id.windowEnd",
+
+                "tradeCount": 1,
+                "totalQty": 1,
+                "avgPrice": { "$round": [ "$avgPrice", 4 ] },
+
+                "vwap": {
+                  "$cond": [
+                    { "$gt": [ "$vwap_den", 0 ] },
+                    { "$round": [ { "$divide": [ "$vwap_num", "$vwap_den" ] }, 4 ] },
+                    null
+                  ]
+                },
+
+                "totalBuyQty": 1,
+                "totalSellQty": 1,
+                "imbalance": { "$subtract": [ "$totalBuyQty", "$totalSellQty" ] },
+
+                "minPrice": 1,
+                "maxPrice": 1
+              } 
+          }
+        ]
+      }
+    },
+    {
       "$merge": {
         "into": {
           "connectionName": "{{ atlas_db_connection_name }}",
