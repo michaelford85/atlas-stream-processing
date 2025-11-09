@@ -19,10 +19,11 @@ The workflow consists of:
 - A Confluent Cloud Kafka cluster
 - Access credentials for Confluent (Bootstrap servers, API key/secret)
 - MongoDB Atlas CLI or Stream Processing shell (mongosh)
+- **Ansible** (to automate connection and processor creation)
 
 ---
 
-## 1. Creating the Kafka Connection
+## 1. Creating the Kafka Connection (GUI)
 
 1. Go to **Atlas → Stream Processing → Connections → Create Connection**.
 2. Choose **Kafka** as the connection type.
@@ -40,7 +41,7 @@ For more info: [Confluent Cloud Quickstart for Kafka Topics](https://developer.c
 
 ---
 
-## 2. Creating the MongoDB Atlas Sink Connection
+## 2. Creating the MongoDB Atlas Sink Connection (GUI)
 
 Create a second connection to write processed data into MongoDB:
 
@@ -53,9 +54,66 @@ Create a second connection to write processed data into MongoDB:
 
 ---
 
-## 3. Creating the Stream Processor
+## 3. Automating with Ansible (Connections & Processor)
 
-The processor reads from the Kafka topic, groups data by ticker symbol over a 10-second processing-time tumbling window, and calculates multiple metrics.
+You can provision everything via Ansible playbooks in this repo.
+
+### A) Create both **ASP Connections** (Kafka + Atlas)
+Playbook: `create-asp-connections.yml`
+
+**What it does**
+- Loads variables from `./vars/processor_details_local.yml` if present, otherwise from `./vars/processor_details.yml`.
+- Calls the Atlas API to **list existing connections**, then **creates only what’s missing** (idempotent).
+- Creates:
+  - **Kafka connection** (SASL_SSL PLAIN) with bootstrap servers and client credentials.
+  - **Atlas cluster connection** for the sink with `readWriteAnyDatabase` role.
+
+**Run**
+```bash
+ansible-playbook create-asp-connections.yml -i localhost,
+```
+
+**Expected variables (in your vars file)**
+```yaml
+atlas_group_id: "<your-project-id>"
+workspace_name: "<your-asp-workspace-name>"
+atlas_public_key: "<atlas-public-api-key>"
+atlas_private_key: "<atlas-private-api-key>"
+
+kafka_connection_name: "confluent_cloud"
+kafka_bootstrap_server: "<pkc-xxxxx.us-west2.gcp.confluent.cloud:9092>"
+kafka_client_id: "<confluent-api-key>"
+kafka_client_secret: "<confluent-api-secret>"
+
+atlas_db_connection_name: "stock trade sample data collection"
+atlas_cluster_name: "<your-atlas-cluster-name>"
+```
+> The playbook is safe to re-run; it checks for existing connections first.
+
+### B) Create the **Stream Processor**
+Playbook: `create-atlas-stream-processor.yml`
+
+**What it does**
+- Renders your processor JSON from `templates/stream_processor.j2` → `files/stream_processor_definition.json`.
+- Loads the JSON definition and **creates the processor only if it doesn’t exist**.
+- Uses the Atlas Streams API endpoint for processor creation.
+
+**Run**
+```bash
+ansible-playbook create-atlas-stream-processor.yml -i localhost,
+```
+
+**Important files**
+- `templates/stream_processor.j2` — the Jinja2 template for your processor pipeline.
+- `files/stream_processor_definition.json` — the rendered JSON sent to the Atlas API.
+
+> Run the connections playbook **first**, then the processor playbook. Re-running is safe (both are idempotent).
+
+---
+
+## 4. Creating the Stream Processor (Pipeline)
+
+The processor reads from the Kafka topic, groups data by ticker symbol over a 10-second **processing-time** tumbling window, and calculates multiple metrics. It also stamps each window with start/end UTC timestamps.
 
 📸 *Example screenshot of processor configuration:*
 ![Stream Processor Screenshot](images/stream_processor.png)
@@ -97,13 +155,13 @@ The processor reads from the Kafka topic, groups data by ticker symbol over a 10
           {
             "$project": {
               "_id": 0,
-              "symbol": "$._id.symbol",
-              "windowStart": "$._id.windowStart",
-              "windowEnd": "$._id.windowEnd",
+              "symbol": "$_id.symbol",
+              "windowStart": "$_id.windowStart",
+              "windowEnd": "$_id.windowEnd",
               "windowSecs": {
                 "$dateDiff": {
-                  "startDate": "$._id.windowStart",
-                  "endDate": "$._id.windowEnd",
+                  "startDate": "$_id.windowStart",
+                  "endDate": "$_id.windowEnd",
                   "unit": "second"
                 }
               },
@@ -143,7 +201,7 @@ The processor reads from the Kafka topic, groups data by ticker symbol over a 10
 ### Metrics Produced
 Each window emits a document per stock ticker with:
 - `symbol` — Stock ticker
-- `windowStart` / `windowEnd` — UTC timestamps of the 10-second interval
+- `windowStart` / `windowEnd` — **UTC** timestamps of the 10-second interval
 - `tradeCount` — Number of trades processed
 - `totalQty` — Total shares traded
 - `avgPrice` — Mean trade price
@@ -156,7 +214,7 @@ Each window emits a document per stock ticker with:
 
 ---
 
-## 4. Verifying Output
+## 5. Verifying Output
 
 After the processor is running, check the output collection:
 
