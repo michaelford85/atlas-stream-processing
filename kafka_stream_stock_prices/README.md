@@ -64,7 +64,7 @@ Create a second connection to write processed data into MongoDB:
 
 ---
 
-### Option B: Automating with Ansible (Connections & Processor)
+### Option B: Automating with Ansible
 
 You can provision everything via Ansible playbooks in this repo.
 
