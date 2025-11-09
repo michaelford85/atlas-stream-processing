@@ -46,7 +46,7 @@ The workflow consists of:
    - **Mechanism** → `PLAIN`
 4. Name this connection (e.g., `confluent_cloud`).
 
-![Kafka Connection Screenshot](images/kafka_connection.png)
+<img src="images/kafka_connection.png" alt="Kafka Connection Screenshot" width="500">
 
 ---
 
@@ -58,7 +58,7 @@ Create a second connection to write processed data into MongoDB:
 2. Select your target cluster and database.
 3. Name this connection (e.g., `stock trade sample data collection`).
 
-![MongoDB Connection Screenshot](images/atlas_connection.png)
+<img src="images/atlas_connection.png" alt="MongoDB Connection Screensho" width="500">
 
 ---
 
@@ -222,7 +222,7 @@ Each window emits a document per stock ticker with:
 
 To make things quick, you can start, stop, and delete your Atlas Stream Processor from the command line. Retrieve the connection string for your Atlas Stream Processing Workpace by going to **Atlas → Stream Processing → Connect** within your specified workspace:
 
-![Sample Output Screenshot](images/connect_to_workspace.png)
+<img src="images/connect_to_workspace.png" alt="Stream Processor Start" width="500">
 
 After connecting to your workspace via the CLI, run the following commands to manage your Stream Processor. For example, given the name of the Atlas Stream Processor as `Kafka stock trade processor`:
 
@@ -254,9 +254,6 @@ All timestamps are stored in **UTC**. To convert in queries:
   }
 }
 ```
-
-
-<!-- ![Sample Output Screenshot](images/stream_output.png) -->
 
 <img src="images/stream_output.png" alt="Sample Output Screenshot" width="500">
 ---
