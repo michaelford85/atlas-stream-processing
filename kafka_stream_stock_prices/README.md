@@ -256,8 +256,9 @@ All timestamps are stored in **UTC**. To convert in queries:
 ```
 
 
-![Sample Output Screenshot](images/stream_output.png)
+<!-- ![Sample Output Screenshot](images/stream_output.png) -->
 
+<img src="images/stream_output.png" alt="Sample Output Screenshot" width="500">
 ---
 
 ## References
