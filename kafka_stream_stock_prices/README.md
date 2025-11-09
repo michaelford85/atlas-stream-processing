@@ -1,183 +1,193 @@
-# 🧩 Atlas Stream Processor — Kafka Stock Prices
+# MongoDB Atlas Stream Processing: Stock Trade Aggregation
 
-This directory contains an **Ansible-driven workflow** for building and managing a MongoDB **Atlas Stream Processing (ASP)** pipeline that ingests **stock trade data** from Kafka and writes it into an Atlas database collection.
-
----
-
-## 📁 Folder Overview
-
-```
-kafka_stream_stock_prices/
-├── files/
-│   └── stream_processor_definition.json     # Rendered or static JSON definition for the Stream Processor
-├── templates/
-│   └── stream_processor.j2                  # Jinja2 template used to generate the processor definition dynamically
-├── vars/
-│   ├── processor_details.yml                # Variable file containing names, connection IDs, and Kafka/Atlas details
-├── create-asp-connections.yml               # Playbook for creating Kafka and Atlas Database connections
-├── create-atlas-stream-processor.yml        # Playbook for creating, validating, and starting the Stream Processor
-```
+This project demonstrates how to build a **real-time stock trade analytics pipeline** using **MongoDB Atlas Stream Processing (ASP)**. It shows how to connect to a **Kafka topic (Confluent Cloud)** streaming live trade data, process it with **tumbling windows**, and output aggregated metrics into a MongoDB collection.
 
 ---
 
-## 🎯 Purpose
+## Overview
 
-The goal of this automation is to create a **streaming data pipeline** in Atlas that continuously processes stock trade events from a Kafka topic (for example, `stock_prices`) and sinks them into an Atlas collection for downstream analytics.
-
-You can use this as a template for other real-time workloads like market data, IoT metrics, or trade aggregation.
+The workflow consists of:
+1. **Kafka Source (Confluent Cloud)** → A topic streaming stock trade data (`sample_data_stock_trades`).
+2. **Atlas Stream Processing (ASP)** → A stream processor running a 10-second tumbling window to compute real-time metrics.
+3. **Atlas Sink** → A target MongoDB collection (`stock_prices`) where the processed aggregates are stored.
 
 ---
 
-## ⚙️ Components
+## Prerequisites
 
-### 1. **Kafka Connection**
-Defined and created via `create-asp-connections.yml`.  
-This sets up an external source connection (e.g., Confluent Cloud or self-managed Kafka).
+- A MongoDB Atlas project with Stream Processing enabled
+- A Confluent Cloud Kafka cluster
+- Access credentials for Confluent (Bootstrap servers, API key/secret)
+- MongoDB Atlas CLI or Stream Processing shell (mongosh)
 
-Key fields:
-```yaml
-type: "KAFKA"
-bootstrapServers: "broker1:9092,broker2:9092"
-security:
-  protocol: "SASL_SSL"
-authentication:
-  mechanism: "PLAIN"
-  username: "{{ client_id }}"
-  password: "{{ client_secret }}"
-networking:
-  access:
-    type: "PUBLIC"
-```
+---
 
-### 2. **Atlas Database Connection**
-Also created in `create-asp-connections.yml`, this enables ASP to write directly to your Atlas cluster.
+## 1. Creating the Kafka Connection
 
-Example:
-```yaml
-type: "ATLAS"
-clusterName: "{{ atlas_cluster_name }}"
-dbRoleToExecute:
-  role: "readWriteAnyDatabase"
-  type: "BUILT_IN"
-```
+1. Go to **Atlas → Stream Processing → Connections → Create Connection**.
+2. Choose **Kafka** as the connection type.
+3. Fill out the required fields:
+   - **Bootstrap servers** → Provided by Confluent Cloud
+   - **Authentication** → Client ID & Secret
+   - **Security protocol** → `SASL_SSL`
+   - **Mechanism** → `PLAIN`
+4. Name this connection (e.g., `confluent_cloud`).
 
-### 3. **Stream Processor Definition**
-The **JSON pipeline** (rendered from `templates/stream_processor.j2`) defines how data flows:
+📸 *Example screenshot:*
+![Kafka Connection Screenshot](images/kafka_connection.png)
+
+For more info: [Confluent Cloud Quickstart for Kafka Topics](https://developer.confluent.io/quickstart/kafka-on-confluent-cloud/)
+
+---
+
+## 2. Creating the MongoDB Atlas Sink Connection
+
+Create a second connection to write processed data into MongoDB:
+
+1. Go to **Connections → Create Connection → MongoDB Atlas Cluster**.
+2. Select your target cluster and database.
+3. Name this connection (e.g., `stock trade sample data collection`).
+
+📸 *Example screenshot:*
+![MongoDB Connection Screenshot](images/atlas_connection.png)
+
+---
+
+## 3. Creating the Stream Processor
+
+The processor reads from the Kafka topic, groups data by ticker symbol over a 10-second processing-time tumbling window, and calculates multiple metrics.
+
+📸 *Example screenshot of processor configuration:*
+![Stream Processor Screenshot](images/stream_processor.png)
+
+### Processor Definition
 
 ```json
 {
-  "name": "{{ stream_processor_name }}",
+  "name": "stock_trade_window_processor",
   "pipeline": [
     {
-      "name": "source",
-      "type": "KAFKA",
-      "connectionName": "{{ kafka_connection_name }}",
-      "topic": "stock_prices"
+      "$source": {
+        "connectionName": "confluent_cloud",
+        "topic": "sample_data_stock_trades"
+      }
     },
     {
-      "name": "sink",
-      "type": "ATLAS",
-      "connectionName": "{{ atlas_db_connection_name }}",
-      "db": "{{ atlas_db_name }}",
-      "collection": "{{ atlas_collection_name }}"
+      "$tumblingWindow": {
+        "interval": { "size": 10, "unit": "second" },
+        "pipeline": [
+          {
+            "$group": {
+              "_id": {
+                "symbol": "$symbol",
+                "windowStart": { "$meta": "stream.window.start" },
+                "windowEnd":   { "$meta": "stream.window.end" }
+              },
+              "totalQty":   { "$sum": "$quantity" },
+              "avgPrice":   { "$avg": "$price" },
+              "vwap_num":   { "$sum": { "$multiply": [ "$price", "$quantity" ] } },
+              "vwap_den":   { "$sum": "$quantity" },
+              "tradeCount": { "$sum": 1 },
+              "totalBuyQty":  { "$sum": { "$cond": [ { "$eq": [ "$side", "BUY" ] },  "$quantity", 0 ] } },
+              "totalSellQty": { "$sum": { "$cond": [ { "$eq": [ "$side", "SELL" ] }, "$quantity", 0 ] } },
+              "minPrice": { "$min": "$price" },
+              "maxPrice": { "$max": "$price" }
+            }
+          },
+          {
+            "$project": {
+              "_id": 0,
+              "symbol": "$._id.symbol",
+              "windowStart": "$._id.windowStart",
+              "windowEnd": "$._id.windowEnd",
+              "windowSecs": {
+                "$dateDiff": {
+                  "startDate": "$._id.windowStart",
+                  "endDate": "$._id.windowEnd",
+                  "unit": "second"
+                }
+              },
+              "tradeCount": 1,
+              "totalQty": 1,
+              "avgPrice": { "$round": [ "$avgPrice", 4 ] },
+              "vwap": {
+                "$cond": [
+                  { "$gt": [ "$vwap_den", 0 ] },
+                  { "$round": [ { "$divide": [ "$vwap_num", "$vwap_den" ] }, 4 ] },
+                  null
+                ]
+              },
+              "totalBuyQty": 1,
+              "totalSellQty": 1,
+              "imbalance": { "$subtract": [ "$totalBuyQty", "$totalSellQty" ] },
+              "minPrice": 1,
+              "maxPrice": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "stock trade sample data collection",
+          "db": "confluent_cloud",
+          "coll": "stock_prices"
+        }
+      }
     }
   ]
 }
 ```
 
+### Metrics Produced
+Each window emits a document per stock ticker with:
+- `symbol` — Stock ticker
+- `windowStart` / `windowEnd` — UTC timestamps of the 10-second interval
+- `tradeCount` — Number of trades processed
+- `totalQty` — Total shares traded
+- `avgPrice` — Mean trade price
+- `vwap` — Volume-weighted average price
+- `totalBuyQty` / `totalSellQty` — Buy/sell split
+- `imbalance` — Difference between buy and sell volume
+- `minPrice` / `maxPrice` — Price extremes within the window
+
+📊 *This enables dashboards and time-series analysis of real-time stock behavior.*
+
 ---
 
-## 🚀 Workflow
+## 4. Verifying Output
 
-### Step 1. Configure Variables
-Edit `vars/processor_details.yml` to define:
-```yaml
-atlas_group_id: "<your Atlas project ID>"
-workspace_name: "mford-demo-workspace"
-atlas_public_key: "<your Atlas API public key>"
-atlas_private_key: "<your Atlas API private key>"
-kafka_connection_name: "confluent_cloud"
-atlas_db_connection_name: "atlas_db_conn_1"
-atlas_db_name: "market"
-atlas_collection_name: "stock_prices"
-stream_processor_name: "kafka_stock_trade_processor"
+After the processor is running, check the output collection:
+
+```js
+db.stock_prices.find().sort({ windowStart: -1 }).limit(5).pretty()
 ```
 
----
-
-### Step 2. Create Connections
-Run:
-```bash
-ansible-playbook create-asp-connections.yml
-```
-This provisions both Kafka and Atlas database connections in the Atlas Stream Processing workspace.
-
----
-
-### Step 3. Deploy the Stream Processor
-Render and post the Stream Processor to Atlas:
-
-```bash
-ansible-playbook create-atlas-stream-processor.yml
+All timestamps are stored in **UTC**. To convert in queries:
+```js
+{
+  "$dateToString": {
+    "date": "$windowStart",
+    "timezone": "America/Chicago",
+    "format": "%Y-%m-%dT%H:%M:%S"
+  }
+}
 ```
 
-The playbook will:
-1. Check if a processor with that name already exists.
-2. Render your `stream_processor.j2` template.
-3. Submit the JSON to the Atlas Streams API.
-4. Start the processor automatically.
+📸 *Example screenshot:*
+![Sample Output Screenshot](images/stream_output.png)
 
 ---
 
-### Step 4. Verify and Monitor
-You can verify your processor in the **Atlas UI** under  
-**Stream Processing → Stream Processors → Connection Registry**.
-
-Alternatively, use the API or CLI:
-```bash
-atlas streams processors list --projectId <groupId> --tenantName <workspace_name>
-```
+## References
+- [MongoDB Atlas Stream Processing Docs](https://www.mongodb.com/docs/atlas/stream-processing/)
+- [Confluent Cloud Kafka Quickstart](https://developer.confluent.io/quickstart/kafka-on-confluent-cloud/)
+- [MongoDB Atlas CLI Reference](https://www.mongodb.com/docs/atlas/cli/stable/)
 
 ---
 
-## 🧠 Troubleshooting
-
-| Error | Likely Cause | Fix |
-|-------|---------------|-----|
-| `URL can't contain control characters` | Stream Processor name contains spaces | Use `{{ stream_processor_name | urlencode }}` or underscores in names |
-| `400 Bad Request: Validation Error` | JSON schema mismatch | Check `pipeline` syntax, especially `type` and `connectionName` fields |
-| `409 Conflict` | Processor or connection already exists | Idempotent check should skip creation |
-| `500 Internal Server Error` | Invalid combination of fields or unready connections | Re-run once connections are active |
-
----
-
-## 📈 Example Use Case
-
-A Kafka topic named `stock_prices` streams real-time stock trade data (symbol, price, volume, timestamp).  
-The processor ingests this stream and stores it into an Atlas collection named `market.stock_prices`, enabling:
-
-- Real-time dashboards for stock price movement
-- Historical aggregation via Atlas Charts or aggregation pipelines
-- Integration with MongoDB Atlas Triggers or Atlas Vector Search for analytics
-
----
-
-## 🧰 Requirements
-
-- Ansible ≥ 2.16
-- Python ≥ 3.9 with `requests` and `jmespath`
-- MongoDB Atlas project with:
-  - Stream Processing enabled
-  - Atlas Admin API access keys
-  - Kafka topic accessible from the allowed IPs in Atlas
-
----
-
-## 📄 License
-MIT License — feel free to reuse or adapt for other event-driven workloads.
-
----
-
-## 👤 Author
-**Michael Ford**  
-Example repository: [atlas-stream-processing](https://github.com/mford/atlas-stream-processing)
+✅ **Next Steps:**
+- Add a second stream processor for anomaly detection (price spikes, unusual volume)
+- Integrate with a dashboard (MongoDB Charts or Grafana)
+- Add event-time processing via `tsFieldName` for backtesting historical topics
