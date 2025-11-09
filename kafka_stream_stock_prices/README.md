@@ -35,22 +35,24 @@ The workflow consists of:
 ### Create a Stock Price Source Connector
 - [Datagen Source Connector for Confluent Cloud](https://docs.confluent.io/cloud/current/connectors/cc-datagen-source.html)
 
-## 2. Creating the Kafka Connection (GUI)
+## 2. Create the Atlas Stream Processing Source and Sink
+### Option A: via the MongoDB Atlas GUI
+#### Creating the Kafka Connection (GUI)
 
-1. Go to **Atlas → Stream Processing → Connections → Create Connection**.
-2. Choose **Kafka** as the connection type.
-3. Fill out the required fields:
+- Go to **Atlas → Stream Processing → Connections → Create Connection**.
+- Choose **Kafka** as the connection type.
+- Fill out the required fields:
    - **Bootstrap servers** → Provided by Confluent Cloud
    - **Authentication** → Client ID & Secret
    - **Security protocol** → `SASL_SSL`
    - **Mechanism** → `PLAIN`
-4. Name this connection (e.g., `confluent_cloud`).
+- Name this connection (e.g., `confluent_cloud`).
 
 <img src="images/kafka_connection.png" alt="Kafka Connection Screenshot" width="500">
 
 ---
 
-## 3. Creating the MongoDB Atlas Sink Connection (GUI)
+#### Creating the MongoDB Atlas Sink Connection (GUI)
 
 Create a second connection to write processed data into MongoDB:
 
@@ -62,11 +64,11 @@ Create a second connection to write processed data into MongoDB:
 
 ---
 
-## 4. Automating with Ansible (Connections & Processor)
+### Option B: Automating with Ansible (Connections & Processor)
 
 You can provision everything via Ansible playbooks in this repo.
 
-### A) Create both **ASP Connections** (Kafka + Atlas)
+#### Create both **ASP Connections** (Kafka + Atlas)
 Playbook: `create-asp-connections.yml`
 
 **What it does**
@@ -98,7 +100,7 @@ atlas_cluster_name: "<your-atlas-cluster-name>"
 ```
 > The playbook is safe to re-run; it checks for existing connections first.
 
-### B) Create the **Stream Processor**
+## 3. Create the **Stream Processor** with Ansible
 Playbook: `create-atlas-stream-processor.yml`
 
 **What it does**
@@ -119,11 +121,11 @@ ansible-playbook create-atlas-stream-processor.yml -i localhost,
 
 ---
 
-## 5. Creating the Stream Processor (Pipeline)
+### Stream Processor Aggregation Pipeline Details
 
 The processor reads from the Kafka topic, groups data by ticker symbol over a 30-second **processing-time** tumbling window, and calculates multiple metrics. It also stamps each window with start/end UTC timestamps.
 
-### Processor Definition
+#### Processor Definition
 
 ```json
 {
@@ -203,7 +205,7 @@ The processor reads from the Kafka topic, groups data by ticker symbol over a 30
 }
 ```
 
-### Metrics Produced
+#### Metrics Produced
 Each window emits a document per stock ticker with:
 - `symbol` — Stock ticker
 - `windowStart` / `windowEnd` — **UTC** timestamps of the 30-second interval
@@ -218,7 +220,7 @@ Each window emits a document per stock ticker with:
 📊 *This enables dashboards and time-series analysis of real-time stock behavior.*
 
 ---
-## 6. Start the Stream Processor
+## 4. Start the Stream Processor
 
 To make things quick, you can start, stop, and delete your Atlas Stream Processor from the command line. Retrieve the connection string for your Atlas Stream Processing Workpace by going to **Atlas → Stream Processing → Connect** within your specified workspace:
 
@@ -235,7 +237,7 @@ After connecting to your workspace via the CLI, run the following commands to ma
 ### Delete
 `AtlasStreamProcessing> sp["Kafka stock trade processor"].drop()`
 
-## 7. Verifying Output
+## 5. Verifying Output
 
 After the processor is running, check the output collection after connecting to your mongodb database instance:
 
