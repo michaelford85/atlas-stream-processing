@@ -15,9 +15,9 @@ The workflow consists of:
 
 ## Prerequisites
 
-- A MongoDB Atlas project with Stream Processing enabled
+- A MongoDB Atlas project with Stream Processing enabled and an existing Atlas cluster
 - A Confluent Cloud Kafka cluster
-- Access credentials for Confluent (Bootstrap servers, API key/secret)
+- Access credentials for Confluent Cloud(Bootstrap servers, API key/secret)
 - MongoDB Atlas CLI or Stream Processing shell (mongosh)
 - **Ansible** (to automate connection and processor creation)
 
@@ -50,19 +50,19 @@ The workflow consists of:
 
 ---
 
-## 2. Creating the MongoDB Atlas Sink Connection (GUI)
+## 3. Creating the MongoDB Atlas Sink Connection (GUI)
 
 Create a second connection to write processed data into MongoDB:
 
-1. Go to **Connections → Create Connection → MongoDB Atlas Cluster**.
-2. Select your target cluster and database.
-3. Name this connection (e.g., `stock trade sample data collection`).
+- Go to **Connections → Create Connection → MongoDB Atlas Cluster**.
+- Select your target cluster and database.
+- Name this connection (e.g., `stock trade sample data collection`).
 
 <img src="images/atlas_connection.png" alt="MongoDB Connection Screensho" width="500">
 
 ---
 
-## 3. Automating with Ansible (Connections & Processor)
+## 4. Automating with Ansible (Connections & Processor)
 
 You can provision everything via Ansible playbooks in this repo.
 
@@ -119,7 +119,7 @@ ansible-playbook create-atlas-stream-processor.yml -i localhost,
 
 ---
 
-## 4. Creating the Stream Processor (Pipeline)
+## 5. Creating the Stream Processor (Pipeline)
 
 The processor reads from the Kafka topic, groups data by ticker symbol over a 30-second **processing-time** tumbling window, and calculates multiple metrics. It also stamps each window with start/end UTC timestamps.
 
@@ -218,11 +218,11 @@ Each window emits a document per stock ticker with:
 📊 *This enables dashboards and time-series analysis of real-time stock behavior.*
 
 ---
-## 5. Start the Stream Processor
+## 6. Start the Stream Processor
 
 To make things quick, you can start, stop, and delete your Atlas Stream Processor from the command line. Retrieve the connection string for your Atlas Stream Processing Workpace by going to **Atlas → Stream Processing → Connect** within your specified workspace:
 
-<img src="images/connect_to_workspace.png" alt="Stream Processor Start" width="500">
+<img src="images/connect_to_workspace.png" alt="Stream Processor Start" width="700">
 
 After connecting to your workspace via the CLI, run the following commands to manage your Stream Processor. For example, given the name of the Atlas Stream Processor as `Kafka stock trade processor`:
 
@@ -235,7 +235,7 @@ After connecting to your workspace via the CLI, run the following commands to ma
 ### Delete
 `AtlasStreamProcessing> sp["Kafka stock trade processor"].drop()`
 
-## 5. Verifying Output
+## 7. Verifying Output
 
 After the processor is running, check the output collection after connecting to your mongodb database instance:
 
