@@ -23,7 +23,19 @@ The workflow consists of:
 
 ---
 
-## 1. Creating the Kafka Connection (GUI)
+## 1. Create a Confluent Cloud Kafka Data Source
+
+### Create a Kafka Cluster
+- [Create Kafka Cluster](https://docs.confluent.io/cloud/current/clusters/create-cluster.html#create-ak-clusters)
+  - **NOTE** A cluster of type `BASIC` will suffice for this project.
+
+### Create a Kafka Topic
+- [Create a Kafka Topic in Confluent Cloud GUI](https://docs.confluent.io/cloud/current/topics/overview.html#create-topics)
+
+### Create a Stock Price Source Connector
+- [Datagen Source Connector for Confluent Cloud](https://docs.confluent.io/cloud/current/connectors/cc-datagen-source.html)
+
+## 2. Creating the Kafka Connection (GUI)
 
 1. Go to **Atlas → Stream Processing → Connections → Create Connection**.
 2. Choose **Kafka** as the connection type.
@@ -34,10 +46,7 @@ The workflow consists of:
    - **Mechanism** → `PLAIN`
 4. Name this connection (e.g., `confluent_cloud`).
 
-📸 *Example screenshot:*
 ![Kafka Connection Screenshot](images/kafka_connection.png)
-
-For more info: [Confluent Cloud Quickstart for Kafka Topics](https://developer.confluent.io/quickstart/kafka-on-confluent-cloud/)
 
 ---
 
@@ -49,7 +58,6 @@ Create a second connection to write processed data into MongoDB:
 2. Select your target cluster and database.
 3. Name this connection (e.g., `stock trade sample data collection`).
 
-📸 *Example screenshot:*
 ![MongoDB Connection Screenshot](images/atlas_connection.png)
 
 ---
@@ -113,10 +121,7 @@ ansible-playbook create-atlas-stream-processor.yml -i localhost,
 
 ## 4. Creating the Stream Processor (Pipeline)
 
-The processor reads from the Kafka topic, groups data by ticker symbol over a 10-second **processing-time** tumbling window, and calculates multiple metrics. It also stamps each window with start/end UTC timestamps.
-
-📸 *Example screenshot of processor configuration:*
-![Stream Processor Screenshot](images/stream_processor.png)
+The processor reads from the Kafka topic, groups data by ticker symbol over a 30-second **processing-time** tumbling window, and calculates multiple metrics. It also stamps each window with start/end UTC timestamps.
 
 ### Processor Definition
 
@@ -132,7 +137,7 @@ The processor reads from the Kafka topic, groups data by ticker symbol over a 10
     },
     {
       "$tumblingWindow": {
-        "interval": { "size": 10, "unit": "second" },
+        "interval": { "size": 30, "unit": "second" },
         "pipeline": [
           {
             "$group": {
@@ -201,7 +206,7 @@ The processor reads from the Kafka topic, groups data by ticker symbol over a 10
 ### Metrics Produced
 Each window emits a document per stock ticker with:
 - `symbol` — Stock ticker
-- `windowStart` / `windowEnd` — **UTC** timestamps of the 10-second interval
+- `windowStart` / `windowEnd` — **UTC** timestamps of the 30-second interval
 - `tradeCount` — Number of trades processed
 - `totalQty` — Total shares traded
 - `avgPrice` — Mean trade price
@@ -213,14 +218,31 @@ Each window emits a document per stock ticker with:
 📊 *This enables dashboards and time-series analysis of real-time stock behavior.*
 
 ---
+## 5. Start the Stream Processor
+
+To make things quick, you can start, stop, and delete your Atlas Stream Processor from the command line. Retrieve the connection string for your Atlas Stream Processing Workpace by going to **Atlas → Stream Processing → Connect** within your specified workspace:
+
+![Sample Output Screenshot](images/connect_to_workspace.png)
+
+After connecting to your workspace via the CLI, run the following commands to manage your Stream Processor. For example, given the name of the Atlas Stream Processor as `Kafka stock trade processor`:
+
+### Start
+` AtlasStreamProcessing> sp["Kafka stock trade processor"].start()`
+
+### Stop
+`AtlasStreamProcessing> sp["Kafka stock trade processor"].stop()`
+
+### Delete
+`AtlasStreamProcessing> sp["Kafka stock trade processor"].drop()`
 
 ## 5. Verifying Output
 
-After the processor is running, check the output collection:
+After the processor is running, check the output collection after connecting to your mongodb database instance:
 
 ```js
 db.stock_prices.find().sort({ windowStart: -1 }).limit(5).pretty()
 ```
+Where `stock_prices` is the name of the sink collection (yours may be different).
 
 All timestamps are stored in **UTC**. To convert in queries:
 ```js
@@ -233,7 +255,7 @@ All timestamps are stored in **UTC**. To convert in queries:
 }
 ```
 
-📸 *Example screenshot:*
+
 ![Sample Output Screenshot](images/stream_output.png)
 
 ---
@@ -245,7 +267,7 @@ All timestamps are stored in **UTC**. To convert in queries:
 
 ---
 
-✅ **Next Steps:**
+**Other things to try:**
 - Add a second stream processor for anomaly detection (price spikes, unusual volume)
 - Integrate with a dashboard (MongoDB Charts or Grafana)
 - Add event-time processing via `tsFieldName` for backtesting historical topics
