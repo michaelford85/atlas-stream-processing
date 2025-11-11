@@ -22,10 +22,10 @@ This demo provisions four Atlas Stream Processors using the templates in this fo
 ## 🧩 Data Flow
 
 ```
-customers_ref ─┐
-                │
-accounts_ref  ──┼──▶ transactions_enriched
-                │
+customers_ref -─--┐
+                  │
+accounts_ref  ─--─┼──▶ transactions_enriched
+                  │
 transactions_flat ┘
 ```
 
@@ -41,11 +41,13 @@ atlas_materialized_views/
 │   ├── customers_ref.j2
 │   ├── accounts_ref.j2
 │   ├── transactions_flat.j2
-│   ├── transactions_enriched.j2   ← updated to join customers_ref + accounts_ref
-│   └── transactions_minute_stats.j2 (optional)
-├── processor_details.yml          ← public-safe config (no credentials)
-├── processor_details_local.yml    ← local config (private keys, workspace info)
-└── create_processors.yml          ← main Ansible playbook
+│   └── transactions_enriched.j2            ← updated to join customers_ref + accounts_ref
+├── processor_details.yml                   ← public-safe config (no credentials)
+├── processor_details_local.yml             ← local config (private keys, workspace info)
+├── create-sink-colls-indexes.yml           ← Ensures the existence of the materialized view collections and required indexes 
+├── create-asp-source-sink-connections.yml  ← creates Atlas Stream Processing connections
+├── backfill-analytics-views.yml            ← populates `accounts_ref`, `customers_ref`, and `transactions_enriched` collections with existing sample data
+└── deploy-analytics-views.yml              ← deploys stream processors for future transaction data
 ```
 
 ---
