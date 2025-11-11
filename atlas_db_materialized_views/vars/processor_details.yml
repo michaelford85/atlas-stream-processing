@@ -1,0 +1,60 @@
+atlas_base_url: "https://cloud.mongodb.com"
+atlas_group_id: "000000000000000000000000"    # ← fake project ID
+workspace_name: "public-demo-workspace"
+
+# Atlas API Programmatic Keys (dummy)
+atlas_public_key: "PUBKEY_XXXX"
+atlas_private_key: "PRIVKEY_XXXX"
+
+# Connections in Atlas Streams (already created)
+conn_src_customers: "sa_customers"
+conn_src_accounts: "sa_accounts"
+conn_src_transactions: "sa_tx"
+conn_sink: "sa_views"
+
+# Sink
+sink_db: "sample_analytics"
+
+# Source for backfill
+src_db: "sample_analytics"
+
+# Prefix to avoid collisions if multiple demos run in one org
+sp_prefix: "sa_demo_"
+
+api_headers:
+  Accept: "application/vnd.atlas.2025-03-12+json"
+  Content-Type: "application/json"
+
+connections:
+  - name: "{{ conn_src_customers }}"
+    description: "Sample Analytics source (customers)"
+    type: "Cluster"
+    role: "readWriteAnyDatabase"
+    role_type: "BUILT_IN"
+  - name: "{{ conn_src_accounts }}"
+    description: "Sample Analytics source (accounts)"
+    type: "Cluster"
+    role: "readWriteAnyDatabase"
+    role_type: "BUILT_IN"
+  - name: "{{ conn_src_transactions }}"
+    description: "Sample Analytics source (transactions)"
+    type: "Cluster"
+    role: "readWriteAnyDatabase"
+    role_type: "BUILT_IN"
+  - name: "{{ conn_sink }}"
+    description: "Sink for materialized views ({{ sink_db }})"
+    type: "Cluster"
+    role: "readWriteAnyDatabase"
+    role_type: "BUILT_IN"
+
+processors:
+  - name: "{{ sp_prefix }}customers_ref"
+    tpl: "customers_ref.j2"
+  - name: "{{ sp_prefix }}accounts_ref"
+    tpl: "accounts_ref.j2"
+  - name: "{{ sp_prefix }}transactions_flat"
+    tpl: "transactions_flat.j2"
+  - name: "{{ sp_prefix }}transactions_enriched"
+    tpl: "transactions_enriched.j2"
+  - name: "{{ sp_prefix }}transactions_minute_stats"
+    tpl: "transactions_minute_stats.j2"

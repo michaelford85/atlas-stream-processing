@@ -1,0 +1,103 @@
+{
+  "name": "{{ sp_prefix }}transactions_enriched",
+  "pipeline": [
+    { 
+      "$source": {
+        "connectionName": "{{ conn_sink }}",
+        "db": "{{ sink_db }}",
+        "coll": "transactions_flat"
+      }
+    },
+
+    /* -------------------------
+       Lookup: customers_ref
+       ------------------------- */
+    {
+      "$lookup": {
+        "from": { "connectionName": "{{ conn_sink }}", "db": "{{ sink_db }}", "coll": "customers_ref" },
+        "let": { "acc": "$account_id" },
+        "pipeline": [
+          { "$match": { "$expr": { "$in": [ "$$acc", "$account_ids" ] } } },
+          { "$project": { "_id": 1, "username": 1, "name": 1, "email": 1, "tier_and_details": 1 } }
+        ],
+        "as": "cust"
+      }
+    },
+    {
+      "$set": {
+        "customer": { "$first": "$cust" },
+        "tier_detail": {
+          "$getField": {
+            "input": { "$first": "$cust.tier_and_details" },
+            "field": { "$toString": "$account_id" }
+          }
+        }
+      }
+    },
+    { "$unset": "cust" },
+
+    /* -------------------------
+       Lookup: accounts_ref
+       ------------------------- */
+    {
+      "$lookup": {
+        "from": { "connectionName": "{{ conn_sink }}", "db": "{{ sink_db }}", "coll": "accounts_ref" },
+        "localField": "account_id",
+        "foreignField": "account_id",
+        "as": "acct"
+      }
+    },
+    {
+      "$set": {
+        "products": { "$first": "$acct.products" },
+        "account_limit": { "$first": "$acct.limit" }
+      }
+    },
+    { "$unset": "acct" },
+
+
+
+    /* -------------------------
+       Final shape
+       ------------------------- */
+    {
+      "$project": {
+        "_id": 0,
+        "account_id": 1,
+        "date": 1,
+        "symbol": 1,
+        "amount": 1,
+        "price": 1,
+        "transaction_code": 1,
+
+        "customer_id": "$customer._id",
+        "customer_username": "$customer.username",
+        "customer_name": "$customer.name",
+        "customer_email": "$customer.email",
+
+        "customer_tier_and_details": "$customer.tier_and_details",
+        "tier_detail": 1,
+
+        "products": 1,
+        "account_limit": 1
+      }
+    },
+
+    /* -------------------------
+       Upsert to sink
+       ------------------------- */
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "{{ conn_sink }}",
+          "db": "{{ sink_db }}",
+          "coll": "transactions_enriched"
+        },
+        "on": ["account_id", "date"],
+        "whenMatched": "replace",
+        "whenNotMatched": "insert"
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,129 @@
+---
+- name: Deploy Sample Analytics Materialized Views (ASP)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Check if local processor details file exists
+      ansible.builtin.stat:
+        path: "./vars/processor_details_local.yml"
+      register: local_vars_file
+
+    - name: Include local processor details if it exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details_local.yml"
+      when: local_vars_file.stat.exists
+
+    - name: Include default processor details if no local override exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details.yml"
+      when: not local_vars_file.stat.exists
+
+    - name: Render processor JSONs to files/
+      ansible.builtin.template:
+        src: "templates/{{ item.tpl }}"
+        dest: "files/{{ item.name }}.json"
+        mode: "0644"
+      loop: "{{ processors }}"
+
+    - name: List existing processors
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/processors"
+        method: GET
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        return_content: yes
+        status_code: 200
+        validate_certs: yes
+        timeout: 60
+      register: existing_list
+
+    - name: Create processors if not present
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/processor"
+        method: POST
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        # body: "{{ lookup('file', 'files/' + item.name + '.json') }}"
+        body: "{{ lookup('file', 'files/' + item.name + '.json') | from_json }}"
+        body_format: json
+        status_code: [200, 201, 202]
+        return_content: yes
+        validate_certs: yes
+        timeout: 60
+      register: create_resp
+      loop: "{{ processors }}"
+      when: >
+        (existing_list.json.results | default([]) |
+         selectattr('name', 'equalto', item.name) | list | length) == 0
+
+
+    - name: Start each processor (graceful if already running)
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/processor/{{ item.name | urlencode }}:start"
+        method: POST
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        body: "{}"
+        body_format: json
+        status_code: [200, 201, 202, 400]  # 400 may return 'already started'
+        return_content: yes
+        validate_certs: yes
+        timeout: 60
+      register: start_resp
+      loop: "{{ processors }}"
+      failed_when: >
+        start_resp.status == 400 and
+        ('already been started' not in (start_resp.json.detail | default('') | lower))
+
+    - name: Poll processor status
+      ansible.builtin.uri:
+        url: >-
+          {{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}
+          /processors/{{ item.name | urlencode }}
+        method: GET
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        return_content: yes
+        validate_certs: yes
+        timeout: 30
+        status_code: 200
+      register: poll_result
+      until: >
+        (poll_result.json.state | default('')).upper() in ['RUNNING']
+      retries: "{{ (wait_timeout_secs // wait_poll_secs) | int }}"
+      delay: "{{ wait_poll_secs }}"
+      loop: "{{ processors }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: wait_for_running
+
+      # block:
+      #   - name: POST :start
+      #     ansible.builtin.uri:
+      #       url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/processor/{{ item.name | urlencode }}:start"
+      #       method: POST
+      #       url_username: "{{ atlas_public_key }}"
+      #       url_password: "{{ atlas_private_key }}"
+      #       force_basic_auth: no
+      #       headers: "{{ api_headers }}"
+      #       body: "{}"
+      #       body_format: json
+      #       status_code: [200, 201, 202, 400]  # 400 may return 'already started'
+      #       return_content: yes
+      #       validate_certs: yes
+      #       timeout: 60
+      #     register: start_resp
+      #   - name: Show start outcome (skip noisy failure on 'already started')
+      #     ansible.builtin.debug:
+      #       msg: >-
+      #         {{ item.name }} → {{ (start_resp.json.detail | default('started')) | string }}
+      # loop: "{{ processors }}"

@@ -1,0 +1,32 @@
+{
+  "name": "{{ sp_prefix }}accounts_ref",
+  "pipeline": [
+    { 
+      "$source": {
+        "connectionName": "{{ conn_src_accounts }}",
+        "db": "sample_analytics",
+        "coll": "accounts"
+      }
+    },
+    {
+      "$project": {
+        "_id": "$account_id",
+        "account_id": 1,
+        "limit": 1,
+        "products": 1
+      }
+    },
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "{{ conn_sink }}",
+          "db": "{{ sink_db }}",
+          "coll": "accounts_ref"
+        },
+        "on": "_id",
+        "whenMatched": "merge",
+        "whenNotMatched": "insert"
+      }
+    }
+  ]
+}

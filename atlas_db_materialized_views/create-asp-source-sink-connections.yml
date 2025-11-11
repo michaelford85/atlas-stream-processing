@@ -1,0 +1,69 @@
+---
+- name: Create Atlas Streams connections (3 sources + 1 sink)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Check if local processor details file exists
+      ansible.builtin.stat:
+        path: "./vars/processor_details_local.yml"
+      register: local_vars_file
+
+    - name: Include local processor details if it exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details_local.yml"
+      when: local_vars_file.stat.exists
+
+    - name: Include default processor details if no local override exists
+      ansible.builtin.include_vars:
+        file: "./vars/processor_details.yml"
+      when: not local_vars_file.stat.exists
+
+    - name: List existing connections in workspace
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/connections"
+        method: GET
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        return_content: yes
+        status_code: 200
+        validate_certs: yes
+        timeout: 60
+      register: existing_conns
+
+    - name: Create missing connections
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups/{{ atlas_group_id }}/streams/{{ workspace_name }}/connections"
+        method: POST
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers: "{{ api_headers }}"
+        body_format: json
+        body:
+          name: "{{ item.name }}"
+          clusterName: "{{ atlas_cluster_name }}" 
+          dbRoleToExecute:
+            role: "{{ item.role }}"
+            type: "{{ item.role_type }}"
+          type: "{{ item.type }}"
+        status_code: [200, 201, 202]
+        return_content: yes
+        validate_certs: yes
+        timeout: 60
+      loop: "{{ connections }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: >
+        (existing_conns.json.results | default([]) |
+         selectattr('name', 'equalto', item.name) | list | length) == 0
+
+    - name: Show connection statuses (after ensure)
+      ansible.builtin.debug:
+        msg: >-
+          Created/ensured connection '{{ item.name }}' ({{ item.description }}).
+      loop: "{{ connections }}"
+      loop_control:
+        label: "{{ item.name }}"

@@ -2,3 +2,6 @@ kafka_stream_stock_prices/files/stream_processor_definition.json
 kafka_stream_stock_prices/ansible.log
 kafka_stream_stock_prices/vars/processor_details_local.yml
 atlas_db_materialized_views/vars/processor_details_local.yml
+atlas_db_materialized_views/files/*
+!atlas_db_materialized_views/files/test_data.js
+*/.DS_Store

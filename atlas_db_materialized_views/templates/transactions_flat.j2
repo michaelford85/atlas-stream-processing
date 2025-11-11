@@ -1,0 +1,36 @@
+{
+  "name": "{{ sp_prefix }}transactions_flat",
+  "pipeline": [
+    { 
+      "$source": {
+        "connectionName": "{{ conn_src_transactions }}",
+        "db": "sample_analytics",
+        "coll": "transactions"
+      }
+    },
+    { "$unwind": "$transactions" },
+    {
+      "$project": {
+        "account_id": 1,
+        "date": "$transactions.date",
+        "amount": "$transactions.amount",
+        "transaction_code": "$transactions.transaction_code",
+        "symbol": "$transactions.symbol",
+        "price": "$transactions.price",
+        "total": "$transactions.total"
+      }
+    },
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "{{ conn_sink }}",
+          "db": "{{ sink_db }}",
+          "coll": "transactions_flat"
+        },
+        "on": ["account_id", "date", "symbol", "amount", "price"],
+        "whenMatched": "merge",
+        "whenNotMatched": "insert"
+      }
+    }
+  ]
+}
