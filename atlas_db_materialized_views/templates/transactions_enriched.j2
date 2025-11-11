@@ -8,10 +8,6 @@
         "coll": "transactions_flat"
       }
     },
-
-    /* -------------------------
-       Lookup: customers_ref
-       ------------------------- */
     {
       "$lookup": {
         "from": { "connectionName": "{{ conn_sink }}", "db": "{{ sink_db }}", "coll": "customers_ref" },
@@ -35,10 +31,6 @@
       }
     },
     { "$unset": "cust" },
-
-    /* -------------------------
-       Lookup: accounts_ref
-       ------------------------- */
     {
       "$lookup": {
         "from": { "connectionName": "{{ conn_sink }}", "db": "{{ sink_db }}", "coll": "accounts_ref" },
@@ -54,12 +46,6 @@
       }
     },
     { "$unset": "acct" },
-
-
-
-    /* -------------------------
-       Final shape
-       ------------------------- */
     {
       "$project": {
         "_id": 0,
@@ -82,10 +68,6 @@
         "account_limit": 1
       }
     },
-
-    /* -------------------------
-       Upsert to sink
-       ------------------------- */
     {
       "$merge": {
         "into": {

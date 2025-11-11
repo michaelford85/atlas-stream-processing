@@ -61,6 +61,11 @@ atlas_materialized_views/
 - Atlas Programmatic API Keys (use your own keys for local use)
 - Ansible and Python 3 installed locally
 
+In particular, this demonstration will utilize the `sample_analytics` database, and its collections:
+- `accounts`
+- `customers`
+- `transactions`
+
 ### 2. Configure the Environment
 
 Copy the local configuration template and fill in your Atlas details:
@@ -74,12 +79,50 @@ Then edit `processor_details_local.yml` with your:
 - `atlas_public_key` / `atlas_private_key`
 - `atlas_cluster_name` and `atlas_cluster_uri`
 
-### 3. Deploy the Stream Processors
+### 3. Create the source and sink collections and their corresponding indexes
+
+Run the Ansible playbook to create the source and sink collections, along with the unique indexes required to send materialized view data to them:
+
+```bash
+ansible-playbook create-sink-colls-indexes.yml -i localhost
+```
+
+### 4. Populate the `accounts_ref`, `customers_ref`, `transactions_flat`, and `transactions_enriched` collections using the existing sample data
+
+Atlas Stream Processing will operate on new, incoming data. For the existing sample data collection, run the same MongoDB Aggregation Pipelines with the following playbook:
+
+```bash
+ansible-playbook backfill-analytics-views.yml -i localhost
+```
+
+This will give you MongoDB documents with account, `customer`, and `transaction` data, stored altogether, making future queries faster (you can improve search performance further by using indexes).
+
+<img src="images/transaction_enriched_doc.png" alt="Transaction Enriched Document" width="500">
+
+
+### 5. Deploy the Stream Processors Connections
+
+Making sure your stream processing workpace created, and specified with with `workspace_name` variable in the `./vars/processor_details_local.yml` file,  Run the Ansible playbook to create all Stream Processor connections:
+
+```bash
+ansible-playbook create-asp-source-sink-connections.yml -i localhost
+```
+
+This will create all of the connections required to serve as Stream Processor Sources and Sinks in the next step. Your COnnection Registry should look like this:
+
+<img src="images/connection_list.png" alt="Connection List" width="500">
+
+And closer inspection of the Connections should look like so (they are all the same, just named differently to be easily identifiable for the purpose of this exercise):
+
+<img src="images/connection_details.png" alt="Connection Details" width="500">
+
+
+### 6. Deploy the Stream Processors
 
 Run the Ansible playbook to create all processors in your Atlas environment:
 
 ```bash
-ansible-playbook create_processors.yml -e @processor_details_local.yml
+ansible-playbook deploy-analytics-views.yml -i localhost
 ```
 
 This will automatically register and start:
@@ -87,6 +130,8 @@ This will automatically register and start:
 - `accounts_ref`
 - `transactions_flat`
 - `transactions_enriched`
+
+<img src="images/processor_list.png" alt="Processor List" width="500">
 
 Each processor runs continuously, maintaining up-to-date materialized views.
 
@@ -146,11 +191,7 @@ Then re-run the playbook to redeploy updated processors.
 
 ## 🧹 Cleanup
 
-To delete all processors and connections created by this demo:
-
-```bash
-ansible-playbook delete_processors.yml -e @processor_details_local.yml
-```
+Use the GUI to delete all processors and connections, clusters, and the stream processing workspace created by this demo (automations to be added at a later date)
 
 ---
 
