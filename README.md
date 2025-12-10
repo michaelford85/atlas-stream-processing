@@ -10,6 +10,16 @@ These examples demonstrate how Atlas Stream Processing can:
 
 ---
 
+## 🔧 Utility Scripts
+
+### List MongoDB Atlas Projects
+**Playbook:** [`list-atlas-projects.yml`](./list-atlas-projects.yml)  
+- Lists all MongoDB Atlas Projects (Groups) that your API credentials have access to
+- Useful for finding your Project ID before running the examples
+- See [LIST_PROJECTS_README.md](./LIST_PROJECTS_README.md) for setup and usage instructions
+
+---
+
 ## 📚 Example Directories
 
 ### 1. [`kafka_stream_stock_prices/`](./kafka_stream_stock_prices)

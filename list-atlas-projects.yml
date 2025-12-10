@@ -1,0 +1,53 @@
+---
+- name: List MongoDB Atlas Projects
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Check if local credentials file exists
+      ansible.builtin.stat:
+        path: "./vars/atlas_credentials_local.yml"
+      register: local_creds_file
+
+    - name: Include local credentials if it exists
+      ansible.builtin.include_vars:
+        file: "./vars/atlas_credentials_local.yml"
+      when: local_creds_file.stat.exists
+
+    - name: Include default credentials if no local override exists
+      ansible.builtin.include_vars:
+        file: "./vars/atlas_credentials.yml"
+      when: not local_creds_file.stat.exists
+
+    - name: List all Atlas Projects
+      ansible.builtin.uri:
+        url: "{{ atlas_base_url }}/api/atlas/v2/groups"
+        method: GET
+        url_username: "{{ atlas_public_key }}"
+        url_password: "{{ atlas_private_key }}"
+        force_basic_auth: no
+        headers:
+          Accept: "application/vnd.atlas.2025-03-12+json"
+        return_content: yes
+        status_code: 200
+        validate_certs: yes
+        timeout: 60
+      register: projects_list
+
+    - name: Display Projects
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          MongoDB Atlas Projects
+          ========================================
+          Total Projects: {{ projects_list.json.totalCount | default(0) }}
+          
+          {% for project in projects_list.json.results | default([]) %}
+          Project Name: {{ project.name }}
+          Project ID:   {{ project.id }}
+          Created:      {{ project.created }}
+          {% if project.clusterCount is defined %}
+          Clusters:     {{ project.clusterCount }}
+          {% endif %}
+          ---
+          {% endfor %}
