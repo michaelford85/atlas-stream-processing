@@ -4,4 +4,5 @@ kafka_stream_stock_prices/vars/processor_details_local.yml
 atlas_db_materialized_views/vars/processor_details_local.yml
 atlas_db_materialized_views/files/*
 !atlas_db_materialized_views/files/test_data.js
+vars/atlas_credentials_local.yml
 */.DS_Store
